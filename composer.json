@@ -1,5 +1,5 @@
 {
-    "name": "kolab/libkolab",
+    "name": "texxasrulez/libkolab",
     "type": "roundcube-plugin",
     "description": "Plugin to setup a basic environment for the interaction with a Kolab server.",
     "homepage": "https://git.kolab.org/diffusion/RPK/",
@@ -15,12 +15,17 @@
             "name": "Aleksander Machniak",
             "email": "machniak@kolabsys.com",
             "role": "Developer"
+        },
+        {
+            "name": "Gene Hawkins",
+            "email": "texxasrulez@yahoo.com",
+            "role": "Developer"
         }
     ],
     "require": {
         "php": ">=7.2.0",
         "roundcube/plugin-installer": ">=0.1.3",
-        "kolab/libcalendaring": ">=3.4.0",
+        "texxasrulez/libcalendaring": ">=3.4.0",
         "pear/http_request2": "~2.5.0",
         "caxy/php-htmldiff": "~0.1",
         "lolli42/finediff": "~1.0.3"
