@@ -528,7 +528,7 @@ class kolab_storage
             $options = self::$imap->folder_info($oldfolder);
         }
 
-        if (!empty($options) && ($options['norename'] || $options['protected'])) {
+        if (!empty($options) && (!empty($options['norename']) || !empty($options['protected']))) {
         }
         // sanity checks (from steps/settings/save_folder.inc)
         elseif (!strlen($folder)) {
@@ -577,7 +577,7 @@ class kolab_storage
         }
         // create new folder
         else {
-            $result = self::folder_create($folder, $prop['type'], $prop['subscribed'], $prop['active']);
+            $result = self::folder_create($folder, $prop['type'], !empty($prop['subscribed']), !empty($prop['active']));
         }
 
         if ($result) {
@@ -629,7 +629,7 @@ class kolab_storage
             }
 
             if ($data = $metadata[$folder] ?? null) {
-                if (($name = $data[self::NAME_KEY_PRIVATE]) || ($name = $data[self::NAME_KEY_SHARED])) {
+                if (($name = $data[self::NAME_KEY_PRIVATE] ?? null) || ($name = $data[self::NAME_KEY_SHARED] ?? null)) {
                     return $name;
                 }
             }
@@ -977,7 +977,9 @@ class kolab_storage
         $folders = self::$imap->list_folders($root, $mbox, null, null, !empty($postfilter));
 
         if (!empty($postfilter)) {
-            $folders = array_filter($folders, function ($folder) use ($postfilter) { return !preg_match($postfilter, $folder); });
+            $folders = array_filter($folders, function ($folder) use ($postfilter) {
+                return !preg_match($postfilter, $folder);
+            });
             $folders = self::$imap->sort_folder_list($folders);
         }
 
@@ -1484,7 +1486,7 @@ class kolab_storage
 
         self::folder_subscribe($folder);
 
-        if ($props['active']) {
+        if (!empty($props['active'])) {
             self::set_state($folder, true);
         }
 

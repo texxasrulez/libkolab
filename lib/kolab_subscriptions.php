@@ -88,9 +88,7 @@ class kolab_subscriptions
         }
 
         if ($this->dav) {
-            if ($type == 'note') {
-                $result = [];
-            } elseif ($type == 'mail') {
+            if ($type == 'mail') {
                 $storage = $this->rc->get_storage();
                 $result = $storage->list_folders();
 
@@ -165,10 +163,6 @@ class kolab_subscriptions
      */
     public function list_subscriptions($deviceid, $type)
     {
-        if ($this->dav && $type == 'note') {
-            return [];
-        }
-
         $result = $this->get_subscriptions($deviceid, $type);
 
         $devicetype = $this->imei_to_type($deviceid);
@@ -201,7 +195,9 @@ class kolab_subscriptions
 
             // Update subscriptions if any folder was removed from the list
             if (!empty($update)) {
-                $data = array_map(function ($v) { return $v[0]; }, $result);
+                $data = array_map(function ($v) {
+                    return $v[0];
+                }, $result);
                 $this->update_subscriptions($deviceid, $type, $data);
             }
         }
@@ -287,10 +283,6 @@ class kolab_subscriptions
         // Folder hrefs returned by kolab_dav_client aren't normalized, i.e. include path prefix
         // We make sure here we use the same path
         if ($this->dav && $type != 'mail') {
-            if ($type == 'note') {
-                return false;
-            }
-
             if ($path = parse_url($this->dav->dav->url, PHP_URL_PATH)) {
                 if (strpos($folder, $path) !== 0) {
                     $folder = '/' . trim($path, '/') . $folder;
@@ -332,10 +324,6 @@ class kolab_subscriptions
 
         if (empty($id)) {
             return false;
-        }
-
-        if ($this->dav && $type == 'note') {
-            return true;
         }
 
         $data = json_encode($subscriptions);

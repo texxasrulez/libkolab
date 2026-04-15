@@ -1139,7 +1139,9 @@ class kolab_storage_cache
                     $extra_args[] = '?';
                 }
 
-                $cols = implode(', ', array_map(function ($n) { return "`{$n}`"; }, $cols));
+                $cols = implode(', ', array_map(function ($n) {
+                    return "`{$n}`";
+                }, $cols));
                 $extra_args = count($extra_args) ? ', ' . implode(', ', $extra_args) : '';
 
                 $result = $this->db->query(
@@ -1174,8 +1176,12 @@ class kolab_storage_cache
         }
 
         if ($buffer && (!$msguid || (strlen($buffer) + strlen($line) > $this->max_sql_packet()))) {
-            $columns = implode(', ', array_map(function ($n) { return "`{$n}`"; }, $cols));
-            $update  = implode(', ', array_map(function ($i) { return "`{$i}` = VALUES(`{$i}`)"; }, array_slice($cols, 2)));
+            $columns = implode(', ', array_map(function ($n) {
+                return "`{$n}`";
+            }, $cols));
+            $update  = implode(', ', array_map(function ($i) {
+                return "`{$i}` = VALUES(`{$i}`)";
+            }, array_slice($cols, 2)));
 
             $result = $this->db->query(
                 "INSERT INTO `{$this->cache_table}` ($columns) VALUES $buffer"

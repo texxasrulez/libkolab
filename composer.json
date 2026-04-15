@@ -1,13 +1,9 @@
 {
-    "name": "texxasrulez/libkolab",
+    "name": "kolab/libkolab",
     "type": "roundcube-plugin",
     "description": "Plugin to setup a basic environment for the interaction with a Kolab server.",
-    "homepage": "https://github.com/texxasrulez/libkolab",
-	"support": {
-		"issues": "https://github.com/texxasrulez/libkolab/issues",
-		"source": "https://github.com/texxasrulez/libkolab"
-	},
-  "license": "GPL-3.0",
+    "homepage": "https://git.kolab.org/diffusion/RPK/",
+    "license": "AGPLv3",
     "version": "3.6.1",
     "authors": [
         {
@@ -23,7 +19,11 @@
     ],
     "require": {
         "php": ">=7.2.0",
-        "roundcube/plugin-installer": ">=0.1.3"
+        "roundcube/plugin-installer": ">=0.1.3",
+        "kolab/libcalendaring": ">=3.4.0",
+        "pear/http_request2": "~2.7.0",
+        "caxy/php-htmldiff": "~0.1",
+        "lolli42/finediff": "~1.0.3"
     },
      "extra": {
         "roundcube": {

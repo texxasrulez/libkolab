@@ -554,7 +554,7 @@ abstract class kolab_format_xcal extends kolab_format
                     );
                 } elseif ($valarm['action'] == 'AUDIO') {
                     $attach = new Attachment();
-                    $attach->setUri($valarm['uri'] ?: 'null', 'unknown');
+                    $attach->setUri(!empty($valarm['uri']) ? $valarm['uri'] : 'null', 'unknown');
                     $alarm = new Alarm($attach);
                 } else {
                     // action == DISPLAY
@@ -766,9 +766,9 @@ abstract class kolab_format_xcal extends kolab_format
                 $b = array_filter($b);
 
                 // advanced rrule comparison: no rescheduling if series was shortened
-                if ($a['COUNT'] && $b['COUNT'] && $b['COUNT'] < $a['COUNT']) {
+                if (!empty($a['COUNT']) && !empty($b['COUNT']) && $b['COUNT'] < $a['COUNT']) {
                     unset($a['COUNT'], $b['COUNT']);
-                } elseif ($a['UNTIL'] && $b['UNTIL'] && $b['UNTIL'] < $a['UNTIL']) {
+                } elseif (!empty($a['UNTIL']) && !empty($b['UNTIL']) && $b['UNTIL'] < $a['UNTIL']) {
                     unset($a['UNTIL'], $b['UNTIL']);
                 }
             }

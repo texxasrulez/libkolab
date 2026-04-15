@@ -50,7 +50,7 @@ class kolab_storage_dav_folder extends kolab_storage_folder
 
         // For DAV we don't really have a standard way to define "default" folders,
         // but MS Outlook (ActiveSync) requires them. This will work with Cyrus DAV.
-        $rx = "~/(calendars|addressbooks)/user/[^/]+/(Default|Tasks)/?$~";
+        $rx = "~/(calendars|addressbooks|files)/user/[^/]+/(Default|Tasks|Notes)/?$~";
         $rx = rcube::get_instance()->config->get('kolab_dav_default_folder_regex') ?: $rx;
 
         $this->default = preg_match($rx, $this->href) === 1;
@@ -166,7 +166,7 @@ class kolab_storage_dav_folder extends kolab_storage_folder
      */
     public function get_name()
     {
-        $name = $this->attributes['name'];
+        $name = $this->get_foldername();
 
         if ($this->get_namespace() == 'other') {
             $name = $this->get_owner() . ': ' . $name;
@@ -182,7 +182,14 @@ class kolab_storage_dav_folder extends kolab_storage_folder
      */
     public function get_foldername()
     {
-        return $this->attributes['name'];
+        $name = $this->attributes['name'] ?? null;
+
+        if ($name === null) {
+            $path = explode('/', trim($this->href, '/'));
+            return rawurldecode(array_last($path));
+        }
+
+        return $name;
     }
 
     /**
@@ -547,7 +554,8 @@ class kolab_storage_dav_folder extends kolab_storage_folder
         if ($content = $this->to_dav($object)) {
             $method   = $uid ? 'update' : 'create';
             $dav_type = $this->get_dav_type();
-            $result   = $this->dav->{$method}($this->object_location($object['uid']), $content, $dav_type);
+            $location = $this->object_location($object['uid']);
+            $result   = $this->dav->{$method}($location, $content, $dav_type);
 
             // Note: $result can be NULL if the request was successful, but ETag wasn't returned
             if ($result !== false) {
@@ -557,6 +565,10 @@ class kolab_storage_dav_folder extends kolab_storage_folder
                 $this->cache->save($object, $uid);
                 $result = true;
                 unset($object['_raw']);
+
+                if ($props = $this->object_props($object)) {
+                    $this->dav->propPatch($location, $props);
+                }
             }
         }
 
@@ -653,7 +665,7 @@ class kolab_storage_dav_folder extends kolab_storage_folder
     /**
      * Convert DAV object into PHP array
      *
-     * @param array $object Object data in kolab_dav_client::fetchData() format
+     * @param array $object Object data in kolab_dav_client::getData() format
      *
      * @return array|false Object properties, False on error
      */
@@ -726,6 +738,14 @@ class kolab_storage_dav_folder extends kolab_storage_folder
                 }
             } else {
                 return false;
+            }
+        } elseif ($this->type == 'note') {
+            $result['description'] = $object['data'];
+
+            foreach (['created', 'changed', 'title', 'links', 'categories'] as $key) {
+                if (isset($object[$key])) {
+                    $result[$key] = $object[$key];
+                }
             }
         }
 
@@ -849,6 +869,8 @@ class kolab_storage_dav_folder extends kolab_storage_folder
                 $result = preg_replace('/\r\nMEMBER:([^\r]+)/', "\r\nX-ADDRESSBOOKSERVER-MEMBER:\\1", $result);
                 $result = preg_replace('/\r\nKIND:([^\r]+)/', "\r\nX-ADDRESSBOOKSERVER-KIND:\\1", $result);
             }
+        } elseif ($this->type == 'note') {
+            $result = $object['description'] ?? '';
         }
 
         if ($result) {
@@ -863,6 +885,19 @@ class kolab_storage_dav_folder extends kolab_storage_folder
     public function object_location($uid)
     {
         return unslashify($this->href) . '/' . urlencode($uid) . '.' . $this->get_dav_ext();
+    }
+
+    protected function object_props($object)
+    {
+        $result = [];
+
+        if ($this->type == 'note') {
+            $result['title'] = $object['title'];
+            $result['categories'] = $object['categories'] ?? [];
+            $result['links'] = $object['links'] ?? [];
+        }
+
+        return rcube_charset::clean($result);
     }
 
     /**
@@ -920,6 +955,7 @@ class kolab_storage_dav_folder extends kolab_storage_folder
             'event' => 'ics',
             'task'  => 'ics',
             'contact' => 'vcf',
+            'note' => 'html',
         ];
 
         return $types[$this->type];
@@ -993,6 +1029,6 @@ class kolab_storage_dav_folder extends kolab_storage_folder
      */
     public function __toString()
     {
-        return $this->attributes['name'];
+        return $this->get_foldername();
     }
 }

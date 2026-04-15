@@ -255,7 +255,22 @@ class kolab_storage_dav
 
         if (!empty($prop['id'])) {
             if ($folder = $this->get_folder($prop['id'], $prop['type'])) {
-                $result = $this->dav->folderUpdate($folder->href, $folder->get_dav_type(), $prop);
+                // For Notes folder update we just rename (move) it
+                if ($prop['type'] == 'note') {
+                    $home = $this->dav->getHome('NOTE');
+                    $location = unslashify($home) . '/' . rawurlencode($prop['name']);
+
+                    if ($location != $folder->href) {
+                        $result = $this->dav->move($folder->href, $location);
+                        if ($result !== false) {
+                            return self::folder_id($this->dav->url, $this->dav->normalize_location($location));
+                        }
+                    } else {
+                        $result = true;
+                    }
+                } else {
+                    $result = $this->dav->folderUpdate($folder->href, $folder->get_dav_type(), $prop);
+                }
 
                 if ($result) {
                     return $prop['id'];
@@ -266,15 +281,21 @@ class kolab_storage_dav
         }
 
         $rcube = rcube::get_instance();
-        $uid   = rtrim(chunk_split(md5($prop['name'] . $rcube->get_user_name() . uniqid('-', true)), 12, '-'), '-');
         $type  = $this->get_dav_type($prop['type']);
-        $home  = $this->dav->getHome($type);
+        $home = $this->dav->getHome($type);
 
         if ($home === null) {
             return false;
         }
 
-        $location = unslashify($home) . '/' . $uid;
+        if ($type == 'NOTE') {
+            // For WebDAV we will not use UIDs
+            $uid = $prop['name'];
+        } else {
+            $uid  = rtrim(chunk_split(md5($prop['name'] . $rcube->get_user_name() . uniqid('-', true)), 12, '-'), '-');
+        }
+
+        $location = unslashify($home) . '/' . rawurlencode($uid);
         $result   = $this->dav->folderCreate($location, $type, $prop);
 
         if ($result) {
@@ -557,9 +578,10 @@ class kolab_storage_dav
             'event' => 'VEVENT',
             'task'  => 'VTODO',
             'contact' => 'VCARD',
+            'note' => 'NOTE',
         ];
 
-        return $types[$type];
+        return $types[$type] ?? null;
     }
 
     /**

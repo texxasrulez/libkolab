@@ -262,7 +262,7 @@ class libkolab extends rcube_plugin
             }
 
             // proxy User-Agent string
-            $request->setHeader('user-agent', $_SERVER['HTTP_USER_AGENT']);
+            $request->setHeader('user-agent', $_SERVER['HTTP_USER_AGENT'] ?? 'Libkolab HTTP client');
 
             self::$http_requests[$key] = $request;
         }
