@@ -27,6 +27,8 @@
 
 class libkolab extends rcube_plugin
 {
+    public $version = '3.6.1';
+
     public static $http_requests = [];
     public static $bonnie_api    = false;
 
@@ -262,7 +264,7 @@ class libkolab extends rcube_plugin
             }
 
             // proxy User-Agent string
-            $request->setHeader('user-agent', $_SERVER['HTTP_USER_AGENT'] ?? 'Libkolab HTTP client');
+            $request->setHeader('user-agent', $_SERVER['HTTP_USER_AGENT']);
 
             self::$http_requests[$key] = $request;
         }

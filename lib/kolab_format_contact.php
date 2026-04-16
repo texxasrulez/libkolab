@@ -142,13 +142,11 @@ class kolab_format_contact extends kolab_format
         if (class_exists('vectoremail')) {
             $vemails = new vectoremail();
             foreach ((array)($object['email'] ?? []) as $email) {
-                $type = $this->emailtypes[$email['type']] ?? null;
+                $type = $this->emailtypes[$email['type']];
                 $vemails->push(new Email($email['address'], intval($type)));
             }
         } else {
-            $vemails = self::array2vector(array_map(function ($v) {
-                return $v['address'];
-            }, $object['email']));
+            $vemails = self::array2vector(array_map(function ($v) { return $v['address']; }, $object['email']));
         }
         $this->obj->setEmailAddresses($vemails);
 

@@ -24,6 +24,8 @@
  */
 class kolab_dav_sharing
 {
+    private const TARGETS_SESSION_KEY = 'libkolab_dav_sharing_targets';
+
     public const PRIVILEGE_READ = 'read';
     public const PRIVILEGE_WRITE = 'write';
 
@@ -445,11 +447,11 @@ class kolab_dav_sharing
      */
     private static function get_folder($id)
     {
-        if (strpos($id, '?')) {
-            [$server_url, $folder_href] = explode('?', $id, 2);
+        $target = $_SESSION[self::TARGETS_SESSION_KEY][$id] ?? null;
 
-            $dav = new kolab_dav_client($server_url);
-            $props = $dav->folderInfo($folder_href);
+        if (is_array($target) && !empty($target['url']) && !empty($target['href'])) {
+            $dav = new kolab_dav_client($target['url']);
+            $props = $dav->folderInfo($target['href']);
 
             if ($props) {
                 return new kolab_storage_dav_folder($dav, $props);
@@ -464,10 +466,30 @@ class kolab_dav_sharing
      */
     private static function get_folder_id($folder)
     {
-        // the folder identifier needs to easily allow for
-        // connecting to the DAV server and getting/setting ACL
-        // TODO: It might be a security issue, consider generating ID and using session
-        // so the server URL is not revealed in the UI.
-        return $folder->dav->url . '?' . $folder->href;
+        if (empty($_SESSION[self::TARGETS_SESSION_KEY]) || !is_array($_SESSION[self::TARGETS_SESSION_KEY])) {
+            $_SESSION[self::TARGETS_SESSION_KEY] = [];
+        }
+
+        $id = self::random_id();
+        $_SESSION[self::TARGETS_SESSION_KEY][$id] = [
+            'url'  => $folder->dav->url,
+            'href' => $folder->href,
+        ];
+
+        // Keep the session map bounded to avoid unbounded growth.
+        if (count($_SESSION[self::TARGETS_SESSION_KEY]) > 100) {
+            $_SESSION[self::TARGETS_SESSION_KEY] = array_slice($_SESSION[self::TARGETS_SESSION_KEY], -100, null, true);
+        }
+
+        return $id;
+    }
+
+    private static function random_id()
+    {
+        try {
+            return bin2hex(random_bytes(16));
+        } catch (Exception $e) {
+            return sha1(uniqid((string) mt_rand(), true));
+        }
     }
 }

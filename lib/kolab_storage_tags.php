@@ -73,40 +73,6 @@ class kolab_storage_tags
     }
 
     /**
-     * Get list of tag names and compare it with the existing tags.
-     * Creates new tags that do not exist yet.
-     *
-     * @param array<string> $list   List of tag names
-     * @param bool          $create Create tags that do not exist
-     *
-     * @return array List of existing tag names
-     */
-    public function compute($list, bool $create = true)
-    {
-        $tags = $this->list_tags();
-        $names = array_column($tags, 'name');
-        $update = false;
-
-        foreach (array_unique(array_filter($list)) as $idx => $tag_name) {
-            if (!in_array($tag_name, $names)) {
-                if ($create) {
-                    $tags[] = ['name' => $tag_name];
-                    $names[] = $tag_name;
-                    $update = true;
-                } else {
-                    unset($list[$idx]);
-                }
-            }
-        }
-
-        if ($update) {
-            $this->save_tags($tags);
-        }
-
-        return array_values($list);
-    }
-
-    /**
      * Create tag object
      *
      * @param array $props Tag properties

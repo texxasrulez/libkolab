@@ -31,8 +31,6 @@ class kolab_dav_client
     public const INVITE_ACCEPTED = 'accepted';
     public const INVITE_DECLINED = 'declined';
 
-    public const KOLAB_NS = 'Kolab:';
-
     public const NOTIFICATION_SHARE_INVITE = 'share-invite-notification';
     public const NOTIFICATION_SHARE_REPLY = 'share-reply-notification';
 
@@ -49,7 +47,6 @@ class kolab_dav_client
     protected $path;
     protected $rc;
     protected $responseHeaders = [];
-    protected $responseCode = null;
 
     /**
      * Object constructor
@@ -77,7 +74,7 @@ class kolab_dav_client
     /**
      * Execute HTTP request to a DAV server
      */
-    protected function request($path, $method, $body = '', $headers = [], $noxml = false)
+    protected function request($path, $method, $body = '', $headers = [])
     {
         $rcube = rcube::get_instance();
         $debug = (bool) $rcube->config->get('dav_debug');
@@ -88,16 +85,13 @@ class kolab_dav_client
         ];
 
         $this->responseHeaders = [];
-        $this->responseCode =  null;
 
         $path = $this->normalize_location($path);
 
         try {
             $request = $this->initRequest($this->url . $path, $method, $request_config);
 
-            if ($this->password !== null && $this->password !== '') {
-                $request->setAuth($this->user, $this->password);
-            }
+            $request->setAuth($this->user, $this->password);
 
             if ($body) {
                 $request->setBody($body);
@@ -123,18 +117,12 @@ class kolab_dav_client
             }
 
             if ($code >= 300) {
-                if (stripos($body, '<html') !== false) {
-                    // Cut HTML response, it is usually useless
-                    $body = '[html code removed]';
-                }
-
-                throw new Exception("DAV Error for {$path} ($code):\n{$body}");
+                throw new Exception("DAV Error ($code):\n{$body}");
             }
 
             $this->responseHeaders = $response->getHeader();
-            $this->responseCode = $code;
 
-            return $noxml ? $body : $this->parseXML($body);
+            return $this->parseXML($body);
         } catch (Exception $e) {
             rcube::raise_error($e, true, false);
             return false;
@@ -146,12 +134,12 @@ class kolab_dav_client
      *
      * @return array|false Homes locations or False on error
      */
-    public function discover($force = false)
+    public function discover()
     {
         if ($cache = $this->get_cache()) {
             $cache_key = "discover." . md5($this->url);
 
-            if (!$force && ($homes = $cache->get($cache_key))) {
+            if ($homes = $cache->get($cache_key)) {
                 return $homes;
             }
         }
@@ -191,7 +179,7 @@ class kolab_dav_client
                 . '</d:prop>'
             . '</d:propfind>';
 
-        $response = $this->request($principal_href, 'PROPFIND', $body, ['Depth' => 0, 'Prefer' => 'return-minimal']);
+        $response = $this->request($principal_href, 'PROPFIND', $body);
 
         if (empty($response)) {
             return false;
@@ -227,14 +215,9 @@ class kolab_dav_client
      */
     public function getHome($type)
     {
-        // FIXME: Can these be discovered?
-        $paths = [
-            'PRINCIPAL' => '/principals/user/',
-            'NOTE' => '/files/user/' . $this->user,
-        ];
-
-        if (isset($paths[$type])) {
-            $path = $paths[$type];
+        // FIXME: Can this be discovered?
+        if ($type == 'PRINCIPAL') {
+            $path = '/principals/user/';
             if ($this->path) {
                 $path = '/' . trim($this->path, '/') . $path;
             }
@@ -259,38 +242,14 @@ class kolab_dav_client
     }
 
     /**
-     * Health check.
-     *
-     * @return array
-     */
-    public function healthcheck(string $user, string $pass)
-    {
-        $this->setCredentials($user, $pass);
-
-        if ($pass !== '') {
-            $result = $this->discover(true) !== false;
-        } else {
-            $result = $this->request('', 'OPTIONS');
-            $result = $result !== false || $this->responseCode === 401;
-        }
-
-        return [$result, $result ? null : "Failed base URL: {$this->url}"];
-    }
-
-    /**
      * Get list of folders of specified type.
      *
-     * @param string $component Component to filter by (VEVENT, VTODO, VCARD, NOTE)
+     * @param string $component Component to filter by (VEVENT, VTODO, VCARD)
      *
      * @return false|array List of folders' metadata or False on error
      */
     public function listFolders($component = 'VEVENT')
     {
-        // TODO: For Notes, getting a list of folders might get slow if user has many folder/files
-        // in his WebDAV root. We should consider implementing some way to filter the list server-side.
-        // We might partially implement SEARCH request. FOr example:
-        // https://docs.nextcloud.com/server/stable/developer_manual/client_apis/WebDAV/search.html
-
         $root_href = $this->getHome($component);
 
         if ($root_href === null) {
@@ -335,10 +294,6 @@ class kolab_dav_client
                 if (in_array('addressbook', $folder['resource_type'])) {
                     $folders[] = $folder;
                 }
-            } elseif ($component == 'NOTE') {
-                if (in_array('notebook', $folder['resource_type'])) {
-                    $folders[] = $folder;
-                }
             } elseif (in_array('calendar', $folder['resource_type']) && in_array($component, (array) $folder['types'])) {
                 $folders[] = $folder;
             }
@@ -352,7 +307,7 @@ class kolab_dav_client
      *
      * @param string $location  Object location
      * @param string $content   Object content
-     * @param string $component Content type (VEVENT, VTODO, VCARD, NOTE)
+     * @param string $component Content type (VEVENT, VTODO, VCARD)
      *
      * @return false|string|null ETag string (or NULL) on success, False on error
      */
@@ -362,7 +317,6 @@ class kolab_dav_client
             'VEVENT' => 'text/calendar',
             'VTODO' => 'text/calendar',
             'VCARD' => 'text/vcard',
-            'NOTE' => 'text/html',
         ];
 
         $headers = ['Content-Type' => $ctype[$component] . '; charset=utf-8'];
@@ -370,34 +324,6 @@ class kolab_dav_client
         $response = $this->request($location, 'PUT', $content, $headers);
 
         return $this->getETagFromResponse($response);
-    }
-
-    /**
-     * Patch a DAV object in a folder
-     *
-     * @param string $location   Object location
-     * @param array  $properties Object properties
-     *
-     * @return bool
-     */
-    public function propPatch($location, $properties = [])
-    {
-        [$props, $ns] = $this->objectPropertiesToXml($properties, 'xmlns:d="DAV:"');
-
-        if (empty($props)) {
-            return true;
-        }
-
-        $body = '<?xml version="1.0" encoding="utf-8"?>'
-            . '<d:propertyupdate ' . $ns . '>'
-                . '<d:set>'
-                    . '<d:prop>' . $props . '</d:prop>'
-                . '</d:set>'
-            . '</d:propertyupdate>';
-
-        $response = $this->request($location, 'PROPPATCH', $body);
-
-        return $response !== false;
     }
 
     /**
@@ -497,26 +423,18 @@ class kolab_dav_client
      * Create a DAV folder
      *
      * @param string $location   Object location (relative to the user home)
-     * @param string $component  Content type (VEVENT, VTODO, VCARD, NOTE)
+     * @param string $component  Content type (VEVENT, VTODO, VCARD)
      * @param array  $properties Object content
      *
      * @return bool True on success, False on error
      */
     public function folderCreate($location, $component, $properties = [])
     {
-        if ($component == 'NOTE') {
-            // We use name in the URL, no need to set displayname
-            unset($properties['name']);
-        }
-
         [$props, $ns] = $this->folderPropertiesToXml($properties, 'xmlns:d="DAV:"');
 
         if ($component == 'VCARD') {
             $ns .= ' xmlns:c="urn:ietf:params:xml:ns:carddav"';
             $props .= '<d:resourcetype><d:collection/><c:addressbook/></d:resourcetype>';
-        } elseif ($component == 'NOTE') {
-            $ns .= ' xmlns:k="' . self::KOLAB_NS . '"';
-            $props .= '<d:resourcetype><d:collection/><k:notebook/></d:resourcetype>';
         } else {
             $ns .= ' xmlns:c="urn:ietf:params:xml:ns:caldav"';
             $props .= '<d:resourcetype><d:collection/><c:calendar/></d:resourcetype>'
@@ -609,34 +527,6 @@ class kolab_dav_client
                 }
 
                 $props .= "<k:{$name}>" . ($value ? 'true' : 'false') . "</k:{$name}>";
-            }
-        }
-
-        return [$props, $ns];
-    }
-
-    /**
-     * Parse object properties input into XML string to use in a request
-     */
-    protected function objectPropertiesToXml($properties, $ns = '')
-    {
-        $props = '';
-
-        foreach ($properties as $name => $value) {
-            if ($name == 'title') {
-                $props .= '<d:displayname>' . htmlspecialchars($value, ENT_XML1, 'UTF-8') . '</d:displayname>';
-            } elseif ($name == 'categories' || $name == 'links') {
-                if (!strpos($ns, self::KOLAB_NS)) {
-                    $ns .= ' xmlns:k="' . self::KOLAB_NS . '"';
-                }
-
-                $list = '';
-                foreach ((array) $value as $item) {
-                    $tag = $name == 'categories' ? 'category' : 'link';
-                    $list .= "<k:{$tag}>" . htmlspecialchars($item, ENT_XML1, 'UTF-8') . "</k:{$tag}>";
-                }
-
-                $props .= "<k:{$name}>{$list}</k:{$name}>";
             }
         }
 
@@ -775,16 +665,12 @@ class kolab_dav_client
      * Fetch DAV objects metadata (ETag, href) a folder
      *
      * @param string $location  Folder location
-     * @param string $component Object type (VEVENT, VTODO, VCARD, NOTE)
+     * @param string $component Object type (VEVENT, VTODO, VCARD)
      *
      * @return false|array Objects metadata on success, False on error
      */
     public function getIndex($location, $component = 'VEVENT')
     {
-        if ($component == 'NOTE') {
-            return $this->getNotesIndex($location);
-        }
-
         $queries = [
             'VEVENT' => 'calendar-query',
             'VTODO' => 'calendar-query',
@@ -831,8 +717,8 @@ class kolab_dav_client
      * Fetch DAV objects data from a folder
      *
      * @param string $location  Folder location
-     * @param string $component Object type (VEVENT, VTODO, VCARD, NOTE)
-     * @param array  $hrefs     List of objects' locations to fetch
+     * @param string $component Object type (VEVENT, VTODO, VCARD)
+     * @param array  $hrefs     List of objects' locations to fetch (empty for all objects)
      *
      * @return false|array Objects metadata on success, False on error
      */
@@ -840,10 +726,6 @@ class kolab_dav_client
     {
         if (empty($hrefs)) {
             return [];
-        }
-
-        if ($component == 'NOTE') {
-            return $this->getNotesData($location, $hrefs);
         }
 
         $body = '';
@@ -891,94 +773,6 @@ class kolab_dav_client
         }
 
         return $objects;
-    }
-
-    /**
-     * Fetch DAV notes index
-     *
-     * @param string $location Folder location
-     *
-     * @return false|array Notes metadata on success, False on error
-     */
-    public function getNotesIndex($location)
-    {
-        $body = '<?xml version="1.0" encoding="utf-8"?>'
-            . '<d:propfind xmlns:d="DAV:" xmlns:k="' . self::KOLAB_NS . '">'
-                . '<d:prop>'
-                    . '<d:creationdate />'
-                    . '<d:displayname />'
-                    . '<d:getcontenttype />'
-                    . '<d:getetag />'
-                    . '<d:getlastmodified />'
-                    . '<k:links />'
-                    . '<k:categories />'
-                . '</d:prop>'
-            . '</d:propfind>';
-
-        $response = $this->request($location, 'PROPFIND', $body, ['Depth' => 1, 'Prefer' => 'return-minimal']);
-
-        if (empty($response)) {
-            return false;
-        }
-
-        $elements = $response->getElementsByTagName('response');
-        $notes = [];
-
-        foreach ($elements as $element) {
-            $note = $this->getObjectPropertiesFromResponse($element, true);
-
-            if ($note['mimetype'] == 'text/html') {
-                $notes[] = $note;
-            }
-        }
-
-        return $notes;
-    }
-
-    /**
-     * Fetch DAV notes data from a folder
-     *
-     * @param string $location Folder location
-     * @param array  $hrefs    List of note locations to fetch
-     *
-     * @return false|array Objects metadata on success, False on error
-     */
-    public function getNotesData($location, $hrefs = [])
-    {
-        if (empty($hrefs)) {
-            return [];
-        }
-
-        // TODO: This is not optimal.
-        //  1. We have to get the whole index (no filter in PROPFIND) - which we already called in cache sync once.
-        //  2. We have to use a separate GET request for every note.
-        // Consider using some non-standard ways:
-        //  - custom BPROPFIND request like https://learn.microsoft.com/en-us/previous-versions/office/developer/exchange-server-2003/aa142725(v=exchg.65)
-        //  - custom REPORT
-        // with a custom property to include the note body.
-
-        $index = $this->getNotesIndex($location);
-
-        if (!is_array($index)) {
-            return false;
-        }
-
-        $result = [];
-
-        foreach ($hrefs as $href) {
-            foreach ($index as $i => $note) {
-                if ($note['href'] == $href) {
-                    // Get the note body
-                    if (($body = $this->request($href, 'GET', '', [], true)) !== false) {
-                        $note['data'] = $body;
-                        $result[] = $note;
-                    }
-                    continue;
-                }
-            }
-        }
-
-        return $result;
     }
 
     /**
@@ -1136,18 +930,6 @@ class kolab_dav_client
     }
 
     /**
-     * Set user name and password
-     *
-     * @param string $user     Username
-     * @param string $password Password
-     */
-    public function setCredentials($user, $password): void
-    {
-        $this->user = $user;
-        $this->password = $password;
-    }
-
-    /**
      * Parse XML content
      */
     protected function parseXML($xml)
@@ -1155,7 +937,7 @@ class kolab_dav_client
         $doc = new DOMDocument('1.0', 'UTF-8');
 
         if (stripos($xml, '<?xml') === 0) {
-            if (!$doc->loadXML($xml, LIBXML_NOBLANKS | LIBXML_PARSEHUGE)) {
+            if (!$doc->loadXML($xml, LIBXML_NOBLANKS)) {
                 throw new Exception("Failed to parse XML");
             }
         }
@@ -1179,7 +961,7 @@ class kolab_dav_client
             $doc->formatOutput = true;
             $doc->preserveWhiteSpace = false;
 
-            if (!$doc->loadXML($body, LIBXML_PARSEHUGE)) {
+            if (!$doc->loadXML($body)) {
                 throw new Exception("Failed to parse XML");
             }
 
@@ -1367,7 +1149,7 @@ class kolab_dav_client
     /**
      * Extract object properties from a server 'response' element
      */
-    protected function getObjectPropertiesFromResponse(DOMElement $element, $extra = false)
+    protected function getObjectPropertiesFromResponse(DOMElement $element)
     {
         $uid = null;
         if ($href = $element->getElementsByTagName('href')->item(0)) {
@@ -1392,41 +1174,12 @@ class kolab_dav_client
             }
         }
 
-        $result = [
+        return [
             'href' => $href,
             'data' => $data,
             'etag' => $etag,
             'uid' => $uid,
         ];
-
-        if ($extra) {
-            $result['mimetype'] = strtolower((string) $element->getElementsByTagName('getcontenttype')->item(0)?->nodeValue);
-            $result['title'] = $element->getElementsByTagName('displayname')->item(0)?->nodeValue;
-
-            if (!isset($result['title'])) {
-                $result['title'] = pathinfo($href, PATHINFO_FILENAME);
-            }
-
-            if ($dt = $element->getElementsByTagName('creationdate')->item(0)?->nodeValue) {
-                $result['created'] = new DateTime($dt);
-            }
-
-            if ($dt = $element->getElementsByTagName('getlastmodified')->item(0)?->nodeValue) {
-                $result['changed'] = new DateTime($dt);
-            }
-
-            foreach (['links', 'categories'] as $name) {
-                $result[$name] = [];
-                if ($list = $element->getElementsByTagName($name)->item(0)) {
-                    $tag = $name == 'categories' ? 'category' : 'link';
-                    foreach ($list->getElementsByTagName($tag) as $item) {
-                        $result[$name][] = $item->nodeValue;
-                    }
-                }
-            }
-        }
-
-        return $result;
     }
 
     /**

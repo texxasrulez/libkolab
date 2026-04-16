@@ -361,7 +361,7 @@ class kolab_storage_config
             // parse_url does not work with imap:/// prefix
             $url   = parse_url(substr($url, 8));
             $path  = explode('/', $url['path']);
-            parse_str($url['query'] ?? '', $params);
+            parse_str($url['query'], $params);
 
             $uid  = array_pop($path);
             $ns   = array_shift($path);
@@ -644,9 +644,7 @@ class kolab_storage_config
 
         while (!empty($uids)) {
             $chunk = array_splice($uids, 0, $limit);
-            $chunk = array_map(function ($v) {
-                return ['member', '=', $v];
-            }, $chunk);
+            $chunk = array_map(function ($v) { return ['member', '=', $v]; }, $chunk);
 
             $filter = [
                 ['type', '=', 'relation'],

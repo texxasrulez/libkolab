@@ -217,16 +217,13 @@ class kolab_storage_dav_cache extends kolab_storage_cache
         }
 
         // Remove deleted objects
-        $old_index = array_keys(array_filter($old_index));
+        $old_index = array_filter($old_index);
         if (!empty($old_index)) {
-            // Do it in chunks to handle huge number of deleted files
-            foreach (array_chunk($old_index, 1000) as $chunk) {
-                $quoted_uids = implode(',', array_map([$this->db, 'quote'], $chunk));
-                $this->db->query(
-                    "DELETE FROM `{$this->cache_table}` WHERE `folder_id` = ? AND `uid` IN ($quoted_uids)",
-                    $this->folder_id
-                );
-            }
+            $quoted_uids = implode(',', array_map([$this->db, 'quote'], $old_index));
+            $this->db->query(
+                "DELETE FROM `{$this->cache_table}` WHERE `folder_id` = ? AND `uid` IN ($quoted_uids)",
+                $this->folder_id
+            );
         }
 
         return true;
@@ -534,9 +531,7 @@ class kolab_storage_dav_cache extends kolab_storage_cache
                     $extra_args[] = '?';
                 }
 
-                $cols = implode(', ', array_map(function ($n) {
-                    return "`{$n}`";
-                }, $cols));
+                $cols = implode(', ', array_map(function ($n) { return "`{$n}`"; }, $cols));
                 $extra_args = count($extra_args) ? ', ' . implode(', ', $extra_args) : '';
 
                 $result = $this->db->query(
@@ -571,20 +566,14 @@ class kolab_storage_dav_cache extends kolab_storage_cache
         }
 
         if ($buffer && ($force || (strlen($buffer) + strlen($line) > $this->max_sql_packet()))) {
-            $columns = implode(', ', array_map(function ($n) {
-                return "`{$n}`";
-            }, $cols));
+            $columns = implode(', ', array_map(function ($n) { return "`{$n}`"; }, $cols));
 
             if ($this->db->db_provider == 'postgres') {
                 $update = "ON CONFLICT (folder_id, uid) DO UPDATE SET "
-                    . implode(', ', array_map(function ($i) {
-                        return "`{$i}` = EXCLUDED.`{$i}`";
-                    }, array_slice($cols, 2)));
+                    . implode(', ', array_map(function ($i) { return "`{$i}` = EXCLUDED.`{$i}`"; }, array_slice($cols, 2)));
             } else {
                 $update = "ON DUPLICATE KEY UPDATE "
-                    . implode(', ', array_map(function ($i) {
-                        return "`{$i}` = VALUES(`{$i}`)";
-                    }, array_slice($cols, 2)));
+                    . implode(', ', array_map(function ($i) { return "`{$i}` = VALUES(`{$i}`)"; }, array_slice($cols, 2)));
             }
 
             $result = $this->db->query("INSERT INTO `{$this->cache_table}` ($columns) VALUES $buffer $update");
@@ -679,27 +668,20 @@ class kolab_storage_dav_cache extends kolab_storage_cache
 
         if (!empty($fast_mode) && !empty($object)) {
             unset($object['_raw']);
-        } elseif ($noread && !empty($object['_raw'])) {
+        } elseif ($noread) {
             // We have the raw content already, parse it
-            $object['data'] = $object['_raw'];
-            if ($object = $this->folder->from_dav($object)) {
-                $init($object);
-                return $object;
+            if (!empty($object['_raw'])) {
+                $object['data'] = $object['_raw'];
+                if ($object = $this->folder->from_dav($object)) {
+                    $init($object);
+                    return $object;
+                }
             }
 
             return null;
         } else {
-            $_object = $object ?? [];
-
             // Fetch a complete object from the server
             $object = $this->folder->read_object($sql_arr['uid'], '*');
-
-            // Copy some props that may not be available by just reading the object content (e.g. for notes)
-            foreach (array_merge($this->data_props, ['created', 'changed']) as $prop) {
-                if (!isset($object[$prop]) && isset($_object[$prop])) {
-                    $object[$prop] = $_object[$prop];
-                }
-            }
         }
 
         return $object;

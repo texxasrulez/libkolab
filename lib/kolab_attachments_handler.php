@@ -25,6 +25,12 @@
 
 class kolab_attachments_handler
 {
+    private const UNSAFE_INLINE_MIME_TYPES = [
+        'application/xhtml+xml',
+        'image/svg+xml',
+        'text/html',
+    ];
+
     private $rc;
     private $attachment;
 
@@ -266,11 +272,12 @@ class kolab_attachments_handler
 
             $mimetype = $plugin['mimetype'];
             [$ctype_primary, $ctype_secondary] = explode('/', $mimetype);
+            $unsafe_inline = empty($_GET['_download']) && $this->is_unsafe_inline_mimetype($mimetype);
 
             $browser = $this->rc->output->browser;
 
             // send download headers
-            if ($plugin['download']) {
+            if ($plugin['download'] || $unsafe_inline) {
                 header("Content-Type: application/octet-stream");
                 if ($browser->ie) {
                     header("Content-Type: application/force-download");
@@ -283,9 +290,8 @@ class kolab_attachments_handler
             }
 
             // display page, @TODO: support text/plain (and maybe some other text formats)
-            if ($mimetype == 'text/html' && empty($_GET['_download'])) {
+            if ($mimetype == 'text/html' && empty($_GET['_download']) && !$unsafe_inline) {
                 $OUTPUT = new rcmail_html_page();
-                // @TODO: use washtml on $body
                 $OUTPUT->write($plugin['body']);
             } else {
                 // don't kill the connection if download takes more than 30 sec.
@@ -337,6 +343,15 @@ class kolab_attachments_handler
     {
         $mimetype = strtolower($this->attachment['mimetype']);
         [$ctype_primary, $ctype_secondary] = explode('/', $mimetype);
+
+        if ($this->is_unsafe_inline_mimetype($mimetype)) {
+            $download_url = $this->rc->url(['_frame' => null, '_download' => 1] + $_GET);
+
+            return html::div(
+                ['class' => 'attachment-preview-blocked'],
+                html::a($download_url, rcube::Q($this->rc->gettext('download')))
+            );
+        }
 
         $attrib['src'] = './?' . str_replace('_frame=', ($ctype_primary == 'text' ? '_show=' : '_preload='), $_SERVER['QUERY_STRING']);
 
@@ -475,5 +490,10 @@ class kolab_attachments_handler
         }
 
         return $result;
+    }
+
+    private function is_unsafe_inline_mimetype($mimetype)
+    {
+        return in_array(strtolower((string) $mimetype), self::UNSAFE_INLINE_MIME_TYPES, true);
     }
 }
