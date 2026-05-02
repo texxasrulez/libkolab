@@ -27,7 +27,16 @@
 
 class libkolab extends rcube_plugin
 {
-    public $version = '3.6.1';
+    const PLUGIN_VERSION = '3.6.1';
+    const PLUGIN_INFO = array(
+        'name' => 'libkolab',
+        'vendor' => 'Gene Hawkins',
+        'version' => self::PLUGIN_VERSION,
+        'license' => 'GPL-3.0',
+        'uri' => 'https://github.com/texxasrulez/libkolab',
+    );
+    
+    public $version = self::PLUGIN_VERSION;
 
     public static $http_requests = [];
     public static $bonnie_api    = false;
